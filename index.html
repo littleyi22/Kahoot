@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kahoot 題目產生器 - 奕鈞老師</title>
+    <!-- 1. 載入 Tailwind CSS (樣式) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 2. 載入 React 和 ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- 3. 載入 Babel (讓瀏覽器看懂 JSX) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- 設定 Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+        @keyframes fade-in-down {
+          0% { opacity: 0; transform: translateY(-20px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-down {
+          animation: fade-in-down 0.8s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // 取得 React Hooks
+        const { useState, useRef, useEffect } = React;
+
+        // -----------------------------------------------------------------------------
+        // 定義圖示元件 (取代 lucide-react)
+        // -----------------------------------------------------------------------------
+        const IconWrapper = ({ children, className, ...props }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
+                {children}
+            </svg>
+        );
+
+        const Upload = (props) => <IconWrapper {...props}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></IconWrapper>;
+        const FileText = (props) => <IconWrapper {...props}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></IconWrapper>;
+        const Download = (props) => <IconWrapper {...props}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></IconWrapper>;
+        const Play = (props) => <IconWrapper {...props}><polygon points="5 3 19 12 5 21 5 3"/></IconWrapper>;
+        const RefreshCw = (props) => <IconWrapper {...props}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></IconWrapper>;
+        const CheckCircle = (props) => <IconWrapper {...props}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></IconWrapper>;
+        const HelpCircle = (props) => <IconWrapper {...props}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></IconWrapper>;
+        const Loader2 = (props) => <IconWrapper {...props}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></IconWrapper>;
+        const ImageIcon = (props) => <IconWrapper {...props}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></IconWrapper>;
+        const FileIcon = (props) => <IconWrapper {...props}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></IconWrapper>;
+        const Edit3 = (props) => <IconWrapper {...props}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></IconWrapper>;
+        const AlertCircle = (props) => <IconWrapper {...props}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></IconWrapper>;
+        const AlertTriangle = (props) => <IconWrapper {...props}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></IconWrapper>;
+
+
+        // -----------------------------------------------------------------------------
+        // Component: Kahoot Generator (主程式邏輯)
+        // -----------------------------------------------------------------------------
+        function KahootGenerator() {
+            const [inputText, setInputText] = useState('');
+            const [parsedData, setParsedData] = useState([]);
+            const [isProcessing, setIsProcessing] = useState(false);
+            const [processStatus, setProcessStatus] = useState(''); 
+            const [activeTab, setActiveTab] = useState('paste'); 
+            
+            const [libsLoaded, setLibsLoaded] = useState({
+                xlsx: false,
+                pdf: false,
+                tesseract: false
+            });
+
+            const fileInputRef = useRef(null);
+
+            // 動態載入外部 Libraries
+            useEffect(() => {
+                const loadScript = (src, id) => {
+                return new Promise((resolve, reject) => {
+                    if (document.getElementById(id)) {
+                    resolve();
+                    return;
+                    }
+                    const script = document.createElement('script');
+                    script.src = src;
+                    script.id = id;
+                    script.async = true;
+                    script.onload = () => resolve();
+                    script.onerror = () => reject();
+                    document.body.appendChild(script);
+                });
+                };
+
+                const loadAllLibs = async () => {
+                try {
+                    // 1. XLSX
+                    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js", "xlsx-lib");
+                    setLibsLoaded(prev => ({ ...prev, xlsx: true }));
+
+                    // 2. PDF.js
+                    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js", "pdf-lib");
+                    if (window.pdfjsLib) {
+                        window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+                    }
+                    setLibsLoaded(prev => ({ ...prev, pdf: true }));
+
+                    // 3. Tesseract.js (OCR)
+                    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js", "tesseract-lib");
+                    setLibsLoaded(prev => ({ ...prev, tesseract: true }));
+                    
+                } catch (err) {
+                    console.error("Library loading failed", err);
+                }
+                };
+
+                loadAllLibs();
+            }, []);
+
+            // 預設範例文字
+            const placeholderText = `請在此貼上題目文字，例如：
+
+1.下列選項中的詞語，何者用字完全正確？  
+（A）焚膏繼晷／屏氣凝神／鍥而不舍  
+（B）好高騖遠／不屑一故／危怠不安  
+（C）驚濤駭浪／言簡意劾／孜孜矻矻   
+（D）歧立不搖／千軍一髮／撫今追昔。
+2.下列「　」中的字義，何組相同？
+（A）「庸」碌之輩／無「庸」置疑
+（B）「顧」不如蜀鄙之僧／三「顧」茅廬
+（C）「逮」捕嫌犯／力有未「逮」
+（D）西蜀之「去」南海／相「去」復幾許。
+3.下列關於「望」字的解釋，何者與其他三者不同？
+（A）魏兵分兩路「望」西城縣殺來 
+（B）懿笑而不信，遂止住三軍，自飛馬遠遠「望」之   
+（C）司馬懿引大軍十五萬，「望」西城蜂擁而來   
+（D）教後軍作前軍，前軍作後軍，「望」北山路而退。
+4.下列關於「之」的用法，何者兩兩相同？
+（A）為「之」，則難者亦易矣／旦旦而學「之」  
+（B）人「之」為學有難易乎／顧不如蜀鄙「之」僧哉  
+（C）僧「之」富者不能至／學「之」，則難者亦易矣  
+（D）人「之」立志／然則昏庸聰敏「之」用。
+5.「在通往夢想的路上，總有阻礙行進的石頭。這些石頭不是別人設下的路障，而是自我設置的難關。一心要實現夢想的人，誰也擋不住他堅持的力量，除非他自己先放棄。」這段文字主要是在勸勉世人哪一種道理？ 
+（A）君子立恆志，小人恆立志  
+（B）吾嘗終日而思矣，不如須臾之所學也  
+（C）旦旦而學之，久而不怠焉  
+（D）不自限其昏與庸而力學不倦，自立者也。
+`;
+
+            // ---------------------------------------------------------------------------
+            // 核心邏輯：解析題目文字 (智慧串流辨識 - V4 優化版)
+            // ---------------------------------------------------------------------------
+            const parseQuestions = (text) => {
+                let normalizedText = text
+                .replace(/（/g, '(')
+                .replace(/）/g, ')')
+                .replace(/【/g, '[')
+                .replace(/】/g, ']');
+
+                // [優化] 預先處理 (D) 選項後的數字黏著問題
+                normalizedText = normalizedText.replace(/((?:（|\[|\()D(?:）|\]|\)|\.).*?)(\d{1,3}[\.\、])/gi, "$1\n$2");
+
+                const questions = [];
+                const questionStartRegex = /(?:^|[\n\r。！？\?]|\s)(\d{1,3})[\.\、]\s+/g;
+                const matches = [...normalizedText.matchAll(questionStartRegex)];
+                
+                if (matches.length === 0) {
+                    return parseQuestionsByLine(normalizedText);
+                }
+
+                for (let i = 0; i < matches.length; i++) {
+                    const currentMatch = matches[i];
+                    const nextMatch = matches[i + 1];
+
+                    const startIndex = currentMatch.index + currentMatch[0].length;
+                    const endIndex = nextMatch ? nextMatch.index : normalizedText.length;
+                    const qId = currentMatch[1]; 
+                    
+                    const matchString = currentMatch[0];
+                    const qIdInMatchIndex = matchString.indexOf(qId);
+                    const numberEndAbsIndex = currentMatch.index + qIdInMatchIndex + qId.length;
+                    
+                    let contentStart = numberEndAbsIndex;
+                    while(contentStart < normalizedText.length && 
+                        (normalizedText[contentStart] === '.' || normalizedText[contentStart] === '、' || 
+                            normalizedText[contentStart] === ' ' || normalizedText[contentStart] === '\t' || normalizedText[contentStart] === '\n')) {
+                        contentStart++;
+                    }
+
+                    let rawContent = normalizedText.substring(contentStart, endIndex).trim();
+                    // [優化] 移除題目開頭的作答框
+                    rawContent = rawContent.replace(/^[\s]*[（(][\s]*[)）][\s]*/, "");
+
+                    // 解析選項
+                    const optionsRegex = /(?:^|[\s。？?：:])(?:\(|\[)?([A-D]|[1-4])(?:\]|\)|\.)(?=\s|\S)/g;
+                    const optMatches = [...rawContent.matchAll(optionsRegex)];
+
+                    let questionText = "";
+                    const options = { A: '', B: '', C: '', D: '' };
+
+                    if (optMatches.length > 0) {
+                        const firstOptIndex = optMatches[0].index;
+                        questionText = rawContent.substring(0, firstOptIndex).trim();
+                        
+                        const separator = rawContent[firstOptIndex];
+                        if (['？', '?', '。', ':', '：'].includes(separator)) {
+                            questionText += separator;
+                        }
+
+                        for (let j = 0; j < optMatches.length; j++) {
+                        const optMatch = optMatches[j];
+                        const nextOptMatch = optMatches[j + 1];
+                        let label = optMatch[1].toUpperCase();
+                        if (label === '1') label = 'A';
+                        if (label === '2') label = 'B';
+                        if (label === '3') label = 'C';
+                        if (label === '4') label = 'D';
+
+                        const optContentStart = optMatch.index + optMatch[0].length;
+                        const optContentEnd = nextOptMatch ? nextOptMatch.index : rawContent.length;
+                        
+                        let optText = rawContent.substring(optContentStart, optContentEnd).trim();
+                        optText = optText.replace(/[;；。]$/, '');
+
+                        if (['A', 'B', 'C', 'D'].includes(label)) {
+                            options[label] = optText;
+                        }
+                        }
+                    } else {
+                        questionText = rawContent;
+                    }
+
+                    // 搜尋答案
+                    let answer = '';
+                    const globalAnsRegex = new RegExp(`(?:答案|Ans|Answer).*?${qId}[.:\\s]?\\s*([A-D1-4])`, 'i');
+                    const globalMatch = text.match(globalAnsRegex);
+                    if (globalMatch) {
+                        answer = mapAnswerToNum(globalMatch[1]);
+                    } else {
+                        const localAnsMatch = rawContent.match(/(?:答案|Ans|Answer)\s*[:：]?\s*([A-D1-4])/i);
+                        if (localAnsMatch) {
+                            answer = mapAnswerToNum(localAnsMatch[1]);
+                        }
+                    }
+
+                    questions.push({
+                        id: qId,
+                        question: questionText,
+                        options: options,
+                        answer: answer
+                    });
+                }
+                return questions;
+            };
+
+            const parseQuestionsByLine = (text) => {
+                const lines = text.split('\n');
+                const questions = [];
+                let currentQ = null;
+
+                const qPattern = /^(\d+)[\.\、\s](.+)/; 
+                const ansPattern = /(?:答案|Ans|Answer)\s*[:：]?\s*([A-D1-4])/i;
+
+                lines.forEach((line) => {
+                const trimmedLine = line.trim();
+                if (!trimmedLine) return;
+
+                const qMatch = trimmedLine.match(qPattern);
+                if (qMatch) {
+                    if (currentQ) questions.push(currentQ);
+                    let qText = qMatch[2].trim();
+                    qText = qText.replace(/^[\s]*[（(][\s]*[)）][\s]*/, "");
+                    
+                    currentQ = {
+                    id: qMatch[1], 
+                    question: qText,
+                    options: { A: '', B: '', C: '', D: '' },
+                    answer: '',
+                    };
+                    return;
+                }
+
+                if (currentQ) {
+                    const ansMatch = trimmedLine.match(ansPattern);
+                    if (ansMatch) {
+                    currentQ.answer = mapAnswerToNum(ansMatch[1]);
+                    return;
+                    }
+                    let foundOption = false;
+                    const matches = [...trimmedLine.matchAll(/[\(\[]?([A-D])[\)\]\.]\s*([^A-D\(\)\n]+)/gi)];
+                    if (matches.length > 0) {
+                    matches.forEach(m => {
+                        const label = m[1].toUpperCase();
+                        const content = m[2].trim();
+                        if (currentQ.options[label] === '') currentQ.options[label] = content;
+                    });
+                    foundOption = true;
+                    } 
+                }
+                });
+                if (currentQ) questions.push(currentQ);
+                return questions;
+            };
+
+            const mapAnswerToNum = (ans) => {
+                if (!ans) return '';
+                const cleanAns = ans.trim().toUpperCase().replace(/[\(\)\.]/g, '');
+                if (['A', '1'].includes(cleanAns)) return 1;
+                if (['B', '2'].includes(cleanAns)) return 2;
+                if (['C', '3'].includes(cleanAns)) return 3;
+                if (['D', '4'].includes(cleanAns)) return 4;
+                return '';
+            };
+
+            const handleProcessText = () => {
+                setIsProcessing(true);
+                setProcessStatus('正在解析題目結構...');
+                setTimeout(() => {
+                const result = parseQuestions(inputText);
+                setParsedData(result);
+                setIsProcessing(false);
+                setProcessStatus('');
+                }, 500);
+            };
+
+            const handleDataChange = (index, field, value) => {
+                const newData = [...parsedData];
+                newData[index][field] = value;
+                setParsedData(newData);
+            };
+
+            const handleOptionChange = (index, optionKey, value) => {
+                const newData = [...parsedData];
+                newData[index].options[optionKey] = value;
+                setParsedData(newData);
+            };
+
+            const handleAnswerChange = (index, value) => {
+                if (value === '' || (['1', '2', '3', '4'].includes(value))) {
+                    const newData = [...parsedData];
+                    newData[index].answer = value === '' ? '' : parseInt(value, 10);
+                    setParsedData(newData);
+                }
+            };
+
+            const processPDF = async (file) => {
+                if (!window.pdfjsLib) return;
+                setProcessStatus('正在讀取 PDF 內容 (多頁可能需要一點時間)...');
+                try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                let fullText = "";
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    setProcessStatus(`正在解析 PDF 第 ${i} / ${pdf.numPages} 頁...`);
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' '); 
+                    fullText += pageText + "\n\n";
+                }
+                setInputText(fullText);
+                setActiveTab('paste');
+                setProcessStatus('');
+                } catch (error) {
+                console.error(error);
+                alert("PDF 解析失敗，可能是加密文件或格式不支援。");
+                setProcessStatus('');
+                }
+            };
+
+            const processImage = async (file) => {
+                if (!window.Tesseract) return;
+                setProcessStatus('正在進行圖片文字辨識 (OCR)，請稍候...');
+                try {
+                const result = await window.Tesseract.recognize(
+                    file, 'chi_tra+eng', 
+                    { logger: m => {
+                        if(m.status === 'recognizing text') {
+                        setProcessStatus(`文字辨識中... ${Math.round(m.progress * 100)}%`);
+                        }
+                    } 
+                    }
+                );
+                setInputText(result.data.text);
+                setActiveTab('paste');
+                setProcessStatus('');
+                } catch (error) {
+                console.error(error);
+                alert("圖片辨識失敗，請重試。");
+                setProcessStatus('');
+                }
+            };
+
+            const handleFileUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                setIsProcessing(true);
+                if (file.type === "text/plain") {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    setInputText(event.target.result);
+                    setActiveTab('paste');
+                    setIsProcessing(false);
+                };
+                reader.readAsText(file);
+                } 
+                else if (file.type === "application/pdf") {
+                if (!libsLoaded.pdf) { alert("PDF 模組尚未載入完成"); setIsProcessing(false); return; }
+                await processPDF(file);
+                setIsProcessing(false);
+                }
+                else if (file.type.startsWith("image/")) {
+                if (!libsLoaded.tesseract) { alert("OCR 模組尚未載入完成"); setIsProcessing(false); return; }
+                await processImage(file);
+                setIsProcessing(false);
+                }
+                else {
+                alert("不支援的檔案格式。請上傳 .txt, .pdf, .jpg, .png");
+                setIsProcessing(false);
+                }
+            };
+
+            const handleExport = () => {
+                if (parsedData.length === 0) {
+                alert("請先輸入題目並進行解析！");
+                return;
+                }
+
+                if (!libsLoaded.xlsx || !window.XLSX) {
+                alert("Excel 產生器尚未載入完成，請稍候再試。");
+                return;
+                }
+
+                const invalidQuestions = [];
+                parsedData.forEach((item, index) => {
+                    if (!item.answer || ![1, 2, 3, 4].includes(item.answer)) {
+                        invalidQuestions.push(index + 1);
+                    }
+                });
+
+                if (invalidQuestions.length > 0) {
+                    alert(`無法下載！\n\n第 ${invalidQuestions.join(', ')} 題「未填寫正確答案」或「格式錯誤」。\n\n請務必在表格最右側「答案」欄位填入 1~4 的數字，才能產出 Excel。`);
+                    return;
+                }
+
+                const excelData = [
+                ['No', 'Question', 'Answer 1', 'Answer 2', 'Answer 3', 'Answer 4', 'Time Limit', 'Correct Answer'],
+                ...parsedData.map((item, index) => [
+                    index + 1,
+                    item.question,
+                    item.options.A,
+                    item.options.B,
+                    item.options.C,
+                    item.options.D,
+                    60,
+                    item.answer
+                ])
+                ];
+
+                const ws = window.XLSX.utils.aoa_to_sheet(excelData);
+                const wb = window.XLSX.utils.book_new();
+                window.XLSX.utils.book_append_sheet(wb, ws, "KahootQuiz");
+                
+                const dateStr = new Date().toISOString().slice(0, 10);
+                window.XLSX.writeFile(wb, `Kahoot_Quiz_${dateStr}.xlsx`);
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-purple-600 via-indigo-600 to-violet-500 font-sans p-4 md:p-8 flex flex-col items-center">
+                <header className="w-full max-w-5xl text-center mb-8 animate-fade-in-down">
+                    <h1 className="text-4xl md:text-6xl font-black text-white drop-shadow-md mb-2 flex flex-col md:flex-row items-center justify-center gap-4" style={{ fontFamily: '"Fredoka One", cursive, sans-serif' }}>
+                    <span className="bg-white text-purple-600 px-4 py-1 rounded-2xl transform -rotate-2 border-4 border-yellow-400">Kahoot</span>
+                    <span className="font-black tracking-wider" style={{ fontFamily: '"Microsoft JhengHei", "Heiti TC", sans-serif' }}>
+                        試題匯入產生器
+                    </span>
+                    </h1>
+                    <p className="text-purple-100 text-lg font-medium tracking-wide mt-2">
+                    ✨ 支援 TXT、PDF 文件及圖片辨識，快速製作課堂遊戲 ✨
+                    </p>
+                </header>
+
+                <main className="w-full max-w-5xl bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl overflow-hidden border-4 border-purple-200">
+                    <div className="p-6 md:p-8 border-b-2 border-purple-100">
+                    <div className="flex gap-4 mb-4">
+                        <button 
+                        onClick={() => setActiveTab('upload')}
+                        className={`flex-1 py-3 px-6 rounded-2xl flex items-center justify-center gap-2 font-bold transition-all ${activeTab === 'upload' ? 'bg-purple-600 text-white shadow-lg scale-105' : 'bg-purple-100 text-purple-400 hover:bg-purple-200'}`}
+                        >
+                        <Upload size={20} /> 檔案上傳 (PDF/圖/TXT)
+                        </button>
+                        <button 
+                        onClick={() => setActiveTab('paste')}
+                        className={`flex-1 py-3 px-6 rounded-2xl flex items-center justify-center gap-2 font-bold transition-all ${activeTab === 'paste' ? 'bg-purple-600 text-white shadow-lg scale-105' : 'bg-purple-100 text-purple-400 hover:bg-purple-200'}`}
+                        >
+                        <FileText size={20} /> 手動貼上 / 編輯區
+                        </button>
+                    </div>
+
+                    {activeTab === 'upload' && (
+                        <div className="h-64 border-4 border-dashed border-purple-300 rounded-2xl flex flex-col items-center justify-center bg-purple-50 group hover:bg-purple-100 transition-colors cursor-pointer relative"
+                            onClick={() => !isProcessing && fileInputRef.current.click()}>
+                        <input 
+                            type="file" 
+                            ref={fileInputRef} 
+                            className="hidden" 
+                            accept=".txt,.pdf,image/png,image/jpeg,image/jpg" 
+                            onChange={handleFileUpload}
+                            disabled={isProcessing}
+                        />
+                        
+                        {isProcessing ? (
+                            <div className="flex flex-col items-center animate-pulse">
+                            <Loader2 size={50} className="text-purple-600 animate-spin mb-4" />
+                            <p className="text-xl font-bold text-purple-700">{processStatus}</p>
+                            </div>
+                        ) : (
+                            <>
+                            <div className="bg-white p-4 rounded-full shadow-md mb-4 group-hover:scale-110 transition-transform flex gap-2">
+                                <FileIcon size={32} className="text-blue-500" />
+                                <ImageIcon size={32} className="text-pink-500" />
+                                <FileText size={32} className="text-purple-500" />
+                            </div>
+                            <p className="text-xl font-bold text-purple-700 mb-2">點擊上傳檔案</p>
+                            <p className="text-sm text-purple-500 max-w-md text-center">
+                                支援格式：.txt 文字檔、.pdf 文件、.jpg/.png 圖片 (OCR)<br/>
+                                <span className="text-xs text-purple-400">* OCR 辨識與 PDF 解析由瀏覽器執行，大檔案可能需等待較久</span>
+                            </p>
+                            <p className="text-red-500 font-bold mt-2 bg-red-100 px-3 py-1 rounded-full flex items-center gap-1">
+                                <AlertTriangle size={16} /> 圖片辨識度不佳，請使用 .txt 或 .pdf 檔
+                            </p>
+                            </>
+                        )}
+                        </div>
+                    )}
+
+                    {activeTab === 'paste' && (
+                        <div className="relative">
+                        <textarea
+                            className="w-full h-64 p-4 rounded-2xl border-4 border-purple-200 focus:border-purple-500 focus:outline-none text-gray-700 text-lg resize-none shadow-inner"
+                            placeholder={placeholderText}
+                            value={inputText}
+                            onChange={(e) => setInputText(e.target.value)}
+                        />
+                        <div className="absolute bottom-4 right-4 flex gap-2">
+                            <button 
+                            onClick={() => setInputText('')}
+                            className="bg-gray-200 text-gray-600 px-3 py-1 rounded-lg text-sm hover:bg-gray-300 font-bold"
+                            >
+                            清空
+                            </button>
+                            <button 
+                            onClick={() => setInputText(placeholderText)}
+                            className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-lg text-sm hover:bg-yellow-200 font-bold"
+                            >
+                            載入範例
+                            </button>
+                        </div>
+                        </div>
+                    )}
+
+                    <div className="mt-6 flex justify-center">
+                        <button 
+                        onClick={handleProcessText}
+                        disabled={!inputText || isProcessing}
+                        className={`px-10 py-4 rounded-full text-xl font-black text-white shadow-xl flex items-center gap-3 transform transition-all ${(!inputText || isProcessing) ? 'bg-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-pink-500 to-purple-600 hover:scale-105 hover:rotate-1'}`}
+                        >
+                        {isProcessing ? <RefreshCw className="animate-spin" /> : <Play fill="currentColor" />}
+                        {isProcessing ? '處理中...' : '開始辨識題目'}
+                        </button>
+                    </div>
+                    </div>
+
+                    {parsedData.length > 0 && (
+                    <div className="p-6 md:p-8 bg-purple-50">
+                        <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+                        <div className="flex flex-col gap-1">
+                            <h2 className="text-2xl font-bold text-purple-800 flex items-center gap-2">
+                            <CheckCircle className="text-green-500" /> 辨識結果預覽 ({parsedData.length} 題)
+                            </h2>
+                            <div className="flex items-center gap-2 text-sm text-purple-600 bg-purple-100 px-3 py-1 rounded-lg">
+                                <Edit3 size={16} />
+                                <span>提示：表格內容可直接點擊修改，若有錯字請手動修正。</span>
+                            </div>
+                        </div>
+
+                        <button 
+                            onClick={handleExport}
+                            disabled={!libsLoaded.xlsx}
+                            className={`bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform hover:-translate-y-1 ${!libsLoaded.xlsx ? 'opacity-50 cursor-wait' : ''}`}
+                        >
+                            <Download size={20} /> 下載 Excel
+                        </button>
+                        </div>
+
+                        <div className="overflow-x-auto rounded-xl border-2 border-purple-200 shadow-sm bg-white h-[75vh] overflow-y-auto">
+                        <table className="w-full text-left border-collapse relative">
+                            <thead className="sticky top-0 z-10">
+                            <tr className="bg-purple-100 text-purple-900 shadow-sm">
+                                <th className="p-3 font-bold border-b border-purple-200 w-16 text-center whitespace-nowrap">序號</th>
+                                <th className="p-3 font-bold border-b border-purple-200 min-w-[200px]">題目</th>
+                                <th className="p-3 font-bold border-b border-purple-200 bg-red-50 text-red-800 min-w-[120px]">選項1 (A)</th>
+                                <th className="p-3 font-bold border-b border-purple-200 bg-blue-50 text-blue-800 min-w-[120px]">選項2 (B)</th>
+                                <th className="p-3 font-bold border-b border-purple-200 bg-yellow-50 text-yellow-800 min-w-[120px]">選項3 (C)</th>
+                                <th className="p-3 font-bold border-b border-purple-200 bg-green-50 text-green-800 min-w-[120px]">選項4 (D)</th>
+                                <th className="p-3 font-bold border-b border-purple-200 text-center w-24">
+                                    答案
+                                    <div className="text-xs font-normal text-gray-500 mt-1">(必填1-4)</div>
+                                </th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {parsedData.map((item, idx) => (
+                                <tr key={idx} className="hover:bg-purple-50 transition-colors border-b border-gray-100">
+                                <td className="p-2 text-center text-gray-500 font-mono font-bold align-top pt-4">
+                                    {idx + 1}
+                                </td>
+                                <td className="p-2 align-top">
+                                    <textarea 
+                                    value={item.question}
+                                    onChange={(e) => handleDataChange(idx, 'question', e.target.value)}
+                                    className="w-full h-full min-h-[80px] p-2 rounded border border-gray-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-gray-800 bg-transparent resize-y"
+                                    />
+                                </td>
+                                <td className="p-2 bg-red-50/30 align-top">
+                                    <textarea 
+                                    value={item.options.A}
+                                    onChange={(e) => handleOptionChange(idx, 'A', e.target.value)}
+                                    className="w-full h-full min-h-[80px] p-2 rounded border border-red-100 focus:border-red-400 focus:ring-2 focus:ring-red-100 outline-none text-sm text-gray-700 bg-transparent resize-y"
+                                    />
+                                </td>
+                                <td className="p-2 bg-blue-50/30 align-top">
+                                    <textarea 
+                                    value={item.options.B}
+                                    onChange={(e) => handleOptionChange(idx, 'B', e.target.value)}
+                                    className="w-full h-full min-h-[80px] p-2 rounded border border-blue-100 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none text-sm text-gray-700 bg-transparent resize-y"
+                                    />
+                                </td>
+                                <td className="p-2 bg-yellow-50/30 align-top">
+                                    <textarea 
+                                    value={item.options.C}
+                                    onChange={(e) => handleOptionChange(idx, 'C', e.target.value)}
+                                    className="w-full h-full min-h-[80px] p-2 rounded border border-yellow-100 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-100 outline-none text-sm text-gray-700 bg-transparent resize-y"
+                                    />
+                                </td>
+                                <td className="p-2 bg-green-50/30 align-top">
+                                    <textarea 
+                                    value={item.options.D}
+                                    onChange={(e) => handleOptionChange(idx, 'D', e.target.value)}
+                                    className="w-full h-full min-h-[80px] p-2 rounded border border-green-100 focus:border-green-400 focus:ring-2 focus:ring-green-100 outline-none text-sm text-gray-700 bg-transparent resize-y"
+                                    />
+                                </td>
+                                <td className="p-2 text-center align-top pt-4">
+                                    <div className="relative">
+                                        <input 
+                                            type="text"
+                                            pattern="[1-4]*"
+                                            maxLength="1"
+                                            placeholder="?"
+                                            value={item.answer || ''}
+                                            onChange={(e) => handleAnswerChange(idx, e.target.value)}
+                                            className={`w-10 h-10 text-center text-lg font-bold rounded-lg border-2 focus:outline-none focus:ring-2 transition-all ${
+                                                !item.answer ? 'border-red-300 bg-red-50 text-red-500 focus:border-red-500 ring-red-200' :
+                                                item.answer === 1 ? 'border-red-500 bg-red-500 text-white' : 
+                                                item.answer === 2 ? 'border-blue-500 bg-blue-500 text-white' : 
+                                                item.answer === 3 ? 'border-yellow-500 bg-yellow-500 text-white' : 
+                                                item.answer === 4 ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300'
+                                            }`}
+                                        />
+                                        {!item.answer && (
+                                            <div className="absolute top-12 left-1/2 transform -translate-x-1/2 text-xs text-red-500 font-bold whitespace-nowrap animate-bounce">
+                                                必填!
+                                            </div>
+                                        )}
+                                    </div>
+                                </td>
+                                </tr>
+                            ))}
+                            </tbody>
+                        </table>
+                        </div>
+
+                        <div className="mt-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 flex items-start gap-3">
+                        <HelpCircle className="text-yellow-600 flex-shrink-0 mt-1" />
+                        <div>
+                            <h3 className="font-bold text-yellow-800 mb-1">如何匯入 Kahoot?</h3>
+                            <p className="text-yellow-700 text-sm leading-relaxed">
+                            下載後，請至 Kahoot 選擇 <span className="font-bold bg-white px-1 rounded border border-yellow-300 mx-1">建立</span> 
+                            &gt; <span className="font-bold bg-white px-1 rounded border border-yellow-300 mx-1">空白</span> 
+                            &gt; <span className="font-bold bg-white px-1 rounded border border-yellow-300 mx-1">新增題目</span> 
+                            &gt; <span className="font-bold bg-white px-1 rounded border border-yellow-300 mx-1">匯入</span> 
+                            &gt; 最下方 <span className="font-bold bg-white px-1 rounded border border-yellow-300 mx-1">匯入試算表</span>，
+                            然後上傳剛剛下載的 Excel 檔即可！
+                            </p>
+                            <div className="mt-2 flex items-center gap-2 text-red-600 text-sm font-bold bg-white/50 p-2 rounded">
+                                <AlertCircle size={16} />
+                                <span>重要提醒：下載前請務必檢查最右側「答案」欄位，必須填入 1~4 的數字，否則 Kahoot 會匯入失敗喔！</span>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                    )}
+                </main>
+
+                <footer className="mt-8 mb-8 text-center text-purple-200">
+                    <div className="flex flex-col md:flex-row items-center justify-center gap-4 text-lg font-medium">
+                        <div className="flex items-center gap-2">
+                            奕鈞老師製作 
+                            <a 
+                                href="https://www.facebook.com/share/1K5MsceXxS/?mibextid=wwXIfr" 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded-full transition-colors"
+                                title="Facebook"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg>
+                            </a>
+                        </div>
+                        
+                        <a 
+                            href="https://futurekn.store/" 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="flex items-center gap-2 bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-white px-4 py-1.5 rounded-full font-bold shadow-lg transition-transform hover:-translate-y-1"
+                        >
+                            <span className="text-xl">🛒</span> 購買 Kahoot 專業版
+                        </a>
+                    </div>
+                </footer>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<KahootGenerator />);
+    </script>
+</body>
+</html>
